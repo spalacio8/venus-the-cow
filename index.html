@@ -28,82 +28,101 @@ var game = new Phaser.Game(config);
 
 var score = 0;
 var scoreText;
+var scoreLvl;
+var gameOver = false;
+var gameStarted = false;
 
 var timedEvent;
 
+var level = 1;
 var counter = 0;
+var clickCounter = 0;
 var unkillable = false;
 
 /**
  * Cargamos en memoria todos los assets que se muestran en 
  * la escena.
  */
-function preload ()
-{
-    this.load.setBaseURL('http://labs.phaser.io');
-    this.load.image('sky', 'assets/skies/sky1.png');
-    this.load.image('ground', 'assets/sprites/block.png');
-    this.load.image('wheat', 'assets/sprites/apple.png');
-    this.load.image('bomb', 'assets/sprites/mine.png');
-    this.load.image('corn', 'assets/sprites/cocktail.png');
+ function preload (){
+    //this.load.setBaseURL('http://labs.phaser.io');
+
+    // Imágenes
+    this.load.setBaseURL('assets');
+    this.load.image('sky', 'background.jpg');
+    this.load.image('ground', 'grass.png');
+    this.load.image('wheat', 'maiz.png');
+    this.load.image('bomb', 'bomb.png');
+    this.load.image('corn', 'mazorca.png');
+    this.load.image('burguer', 'burguer.png');
+
 
     this.load.spritesheet('dude', 
-        'assets/sprites/dude.png',
-        { frameWidth: 32, frameHeight: 48 }
+        'cow.png',
+        { frameWidth: 295, frameHeight: 215 }
     );
 
-    this.load.image('ufo', 'assets/sprites/clown.png');
+    this.load.image('ufo', 'ovni.png');
+
+    // Audios
+    this.load.audio('wheatSound', '/audios/come maiz.mp3');
+    this.load.audio('cornSound', '/audios/come mazorca.mp3');
+    this.load.audio('start', '/audios/fondo juego-introdccion.mp3');
+    this.load.audio('jump', '/audios/moo.mp3');
+    this.load.audio('kill', '/audios/moo2.mp3');
+    this.load.audio('nextLvl', '/audios/pasa nivel.mp3');
+    this.load.audio('dieSound', '/audios/pierde .mp3');
+    this.load.audio('bombSound', '/audios/bomba .mp3');
+
+    this.load.script('webfont', 'https://ajax.googleapis.com/ajax/libs/webfont/1.6.26/webfont.js');
+
 }
 
-function create ()
-{
-    
+function create (){
     // Creacion del terreno
-    this.add.image(400, 300, 'sky').setScale(2);
+    this.add.image(400, 300, 'sky');
 
     platforms = this.physics.add.staticGroup();
+    platforms.create(400, 450, 'ground').setScale(0.5).refreshBody();
+    platforms.create(650, 350, 'ground').setScale(0.5).refreshBody();
+    platforms.create(250, 300, 'ground').setScale(0.75).refreshBody();
+    platforms.create(900, 240, 'ground').setScale(0.5).refreshBody();
 
-    platforms.create(400, 568, 'ground').setScale(20,1).refreshBody();
 
-    platforms.create(600, 400, 'ground');
-    platforms.create(50, 250, 'ground');
-    platforms.create(750, 220, 'ground');
-
+    platforms.create(400, 590, 'ground').setScale(10,1).refreshBody();
 
     // Creacion del player
-    player = this.physics.add.sprite(100, 450, 'dude');
+    player = this.physics.add.sprite(520, 510, 'dude').setScale(0.3);
 
-    player.setBounce(0.2);
+    player.setBounce(0.3);
     player.setCollideWorldBounds(true);
+    player.body.setGravityY(230);
+
+    this.physics.add.collider(player, platforms);
 
     this.anims.create({
         key: 'left',
-        frames: this.anims.generateFrameNumbers('dude', { start: 0, end: 3 }),
+        frames: this.anims.generateFrameNumbers('dude', { start: 0, end: 2 }),
         frameRate: 10,
         repeat: -1
     });
 
     this.anims.create({
         key: 'turn',
-        frames: [ { key: 'dude', frame: 4 } ],
+        frames: [ { key: 'dude', frame: 3 } ],
         frameRate: 20
     });
 
     this.anims.create({
         key: 'right',
-        frames: this.anims.generateFrameNumbers('dude', { start: 5, end: 8 }),
+        frames: this.anims.generateFrameNumbers('dude', { start: 4, end: 6 }),
         frameRate: 10,
         repeat: -1
     });
 
-    player.body.setGravityY(300);
-
-    this.physics.add.collider(player, platforms);
-
     // Controles
     cursors = this.input.keyboard.createCursorKeys();
 
-    // Manzanas
+    // Trigo
     wheats = this.physics.add.group({
         key: 'wheat',
         repeat: 4,
@@ -111,6 +130,7 @@ function create ()
     });
 
     wheats.children.iterate(function (child) {
+        child.setScale(0.4, 0.4);
         child.body.setGravityY(320);
         child.setBounceY(Phaser.Math.FloatBetween(0.4, 0.8));
     });
@@ -118,92 +138,194 @@ function create ()
     this.physics.add.collider(wheats, platforms);
     this.physics.add.overlap(player, wheats, collectStar, null, this);
 
-    // Texto score
-    scoreText = this.add.text(16, 16, 'score: 0', { fontSize: '32px', fill: '#000' });
-
-    //Bombas
-    bombs = this.physics.add.group();
-
-    this.physics.add.collider(bombs, platforms);
-
-    this.physics.add.collider(player, bombs, hitBomb, null, this);
-
-    // Bonus
-    corns = this.physics.add.group();
-    this.physics.add.collider(corns, platforms);
-    this.physics.add.overlap(player, corns, handleBonus, null, this);
-
-    // Tiempo
-    timedEvent = this.time.addEvent({ delay: 2000, callback: onEvent, callbackScope: this, loop: true });
-
     // Ovnis
     ufos = this.physics.add.group();
     this.physics.add.collider(ufos, platforms);
     this.physics.add.collider(player, ufos, hitUFO, null, this);
 
     var x = (player.x < 400) ? Phaser.Math.Between(400, 800) : Phaser.Math.Between(0, 400);
-    var ufo = ufos.create(x, 100, 'ufo').setScale(2);
+    var ufo = ufos.create(x, 100, 'ufo').setScale(0.5);
     ufo.setCollideWorldBounds(true);
     ufo.setVelocity(Phaser.Math.Between(10, 200), 0);
     ufo.setBounce(1);
+
+    // Bombas
+    bombs = this.physics.add.group();
+    this.physics.add.collider(bombs, platforms);
+    this.physics.add.collider(player, bombs, hitBomb, null, this);
+
+    // Bonus
+    corns = this.physics.add.group();
+    this.physics.add.collider(corns, platforms);
+    this.physics.add.overlap(player, corns, handleBonus, null, this);
+    
+    // Tiempo
+    timedEvent = this.time.addEvent({ delay: 5000, callback: onEvent, callbackScope: this, loop: true });
+
+    // Música
+    wheatSound = this.sound.add('wheatSound');
+    cornSound = this.sound.add('cornSound');
+    start = this.sound.add('start');
+    jump = this.sound.add('jump');
+    kill = this.sound.add('kill');
+    nextLvl = this.sound.add('nextLvl');
+    dieSound = this.sound.add('dieSound');
+    bombSound = this.sound.add('bombSound');
+
+    // Muerte
+    burguer = this.physics.add.sprite(400, 300, 'burguer').setScale(0.3);
+    burguer.disableBody(true, true);
+    this.physics.add.collider(burguer, platforms);
+    burguer.body.setGravityY(320);
+    burguer.setBounceY(0.6);
+
+    hideElements();
+
+    var add = this.add;
+    var input = this.input;
+
+    WebFont.load({
+        google: {
+            families: [ 'Freckle Face' ]
+        },
+        active: function ()
+        {
+            var gameName = add.text(400, 130, 'Venus, the cow', { fontFamily: 'Freckle Face', fontSize: 40, color: '#ffffff' }).setShadow(2, 2, "#333333", 2, false, true);
+
+            var introText = [
+                'All the cows on Earth have been',
+                'kidnapped by UFOs, Venus, the last',
+                'reported cow, fights against her',
+                'enemies in an option to return to Earth...',
+                'SPACE to stop all sounds'
+            ];
+            var contentText = add.text(250, 200, introText, { fontFamily: 'Freckle Face', fontSize: 40, color: '#ffffff' }).setShadow(2, 2, "#333333", 2, false, true);
+            var footerText = add.text(400, 450, 'Click to contine...', { fontFamily: 'Freckle Face', fontSize: 40, color: '#ffffff' }).setShadow(2, 2, "#333333", 2, false, true);
+
+            
+            //var t = add.text(330, 200, 'R.I.P', { fontFamily: 'Freckle Face', fontSize: 150, color: '#ff3434' });
+
+            input.on('pointerdown', function () {
+                clickCounter++;
+                if (clickCounter === 1) {
+                    introText = [
+                        'Take the corn to kill the UFOs,',
+                        'Avoid the bombs and you will survive!',
+                        'Good luck!',
+                    ];
+                    contentText.setText(introText);
+                } else if(clickCounter === 2) {
+                    gameName.setText(null);
+                    contentText.setText(null);
+                    footerText.setText(null);
+                    startGame();
+                    // Texto score
+                    scoreLvl = add.text(16, 16, 'Level: ' + level, { fontFamily: 'Freckle Face', fontSize: '32px', fill: '#fff' });
+                    scoreText = add.text(490, 16, 'Score: ' + score, { fontFamily: 'Freckle Face', fontSize: '32px', fill: '#fff' });
+                }
+                //console.log('di click');
+            });
+        }
+    });
+}
+
+function hideElements (){
+    platforms.children.iterate(function (child) {
+        child.disableBody(true, true);
+    });
+    wheats.children.iterate(function (child) {
+        child.disableBody(true, true);
+    });
+}
+
+function startGame (){
+    platforms.children.iterate(function (child) {
+        child.enableBody(true, child.x, child.y, true, true);
+    });
+    wheats.children.iterate(function (child) {
+        child.enableBody(true, child.x, child.y, true, true);
+    });
+    player.setPosition( 520, 200 );
+    start.play({volume: 0.5, loop: true});
+    gameStarted = true;
 }
 
 // Game loop
-function update ()
-{
+function update (){
+    if (!gameOver) {
+        if (gameStarted) {
+            if (cursors.left.isDown)
+            {
+                player.setVelocityX(-180);
+                player.anims.play('left', true);
+            }
+            else if (cursors.right.isDown)
+            {
+                player.setVelocityX(180);
+                player.anims.play('right', true);
+            }
+            else
+            {
+                player.setVelocityX(0);
+                player.anims.play('turn');
+            }
 
-    if (cursors.left.isDown)
-    {
-        player.setVelocityX(-160);
-        player.anims.play('left', true);
-    }
-    else if (cursors.right.isDown)
-    {
-        player.setVelocityX(160);
-        player.anims.play('right', true);
-    }
-    else
-    {
-        player.setVelocityX(0);
-        player.anims.play('turn');
-    }
-
-    if (cursors.up.isDown && player.body.touching.down)
-    {
-        player.setVelocityY(-630);
+            if (cursors.up.isDown && player.body.touching.down)
+            {
+                playSound('jump');
+                player.setVelocityY(-250);
+            }
+        }
     }
 }
 
 function onEvent (){
-    if (ufos.countActive(true) > 0){
-        ufos.children.iterate(function (child) {
-            //console.log(child);
-            if (child.active && child.visible) {
-
-                if (counter === 2) {
-                    var bonus = corns.create(child.x, child.y, 'corn');
-                    bonus.setGravityY(Phaser.Math.Between(0, 300));
-                    bonus.setBounce(Phaser.Math.FloatBetween(0.5, 1));
-                    bonus.setCollideWorldBounds(true);
-                    bonus.setVelocity(Phaser.Math.Between(-200, 200), Phaser.Math.Between(-200, 200));
-                    counter = 0;
-                } else {
-                    var bomb = bombs.create(child.x, child.y, 'bomb');
-                    bomb.setGravityY(Phaser.Math.Between(0, 300));
-                    bomb.setBounce(Phaser.Math.FloatBetween(0.5, 1));
-                    bomb.setCollideWorldBounds(true);
-                    bomb.setVelocity(Phaser.Math.Between(-200, 200), Phaser.Math.Between(-200, 200));
-                    counter++;
-                }
-                
+    if (!gameOver) {
+        if (gameStarted) {
+            if (ufos.countActive(true) > 0){
+                ufos.children.iterate(function (child) {
+                    //console.log(child);
+                    if (child.active && child.visible) {
+                        if (level === 1) {
+                            var bonus = corns.create(child.x, child.y, 'corn').setScale(0.25);
+                            bonus.setGravityY(Phaser.Math.Between(0, 300));
+                            bonus.setBounce(Phaser.Math.FloatBetween(0.5, 1));
+                            bonus.setCollideWorldBounds(true);
+                            bonus.setVelocity(Phaser.Math.Between(-200, 200), Phaser.Math.Between(-200, 200));
+                        } else {
+                            if (counter === 2) {
+                                var bonus = corns.create(child.x, child.y, 'corn').setScale(0.25);
+                                bonus.setGravityY(Phaser.Math.Between(0, 300));
+                                bonus.setBounce(Phaser.Math.FloatBetween(0.5, 1));
+                                bonus.setCollideWorldBounds(true);
+                                bonus.setVelocity(Phaser.Math.Between(-200, 200), Phaser.Math.Between(-200, 200));
+                                counter = 0;
+                            } else {
+                                var bomb = bombs.create(child.x, child.y, 'bomb').setScale(0.08);
+                                bomb.setGravityY(Phaser.Math.Between(0, 300));
+                                bomb.setBounce(Phaser.Math.FloatBetween(0.5, 1));
+                                bomb.setCollideWorldBounds(true);
+                                bomb.setVelocity(Phaser.Math.Between(-200, 200), Phaser.Math.Between(-200, 200));
+                                counter++;
+                                playSound('bombSound');
+                            }
+                        }
+                    }
+                });
             }
-        });
+        }
     }
 }
 
 function updateScore (newScore){
     score += newScore;
     scoreText.setText('Score: ' + score);
+}
+
+function collectStar (player, wheat){
+    wheat.disableBody(true, true);
+    updateScore(10);
+    playSound('wheatSound');
 }
 
 function handleBonus ( player, corn ){
@@ -218,39 +340,20 @@ function handleBonus ( player, corn ){
     player.setTint(0xFFFF00);
     corn.disableBody(true, true);
     unkillable = true;
+    playSound('cornSound');
 }
 
-function collectStar (player, star)
-{
-    star.disableBody(true, true);
-    score += 10;
-    scoreText.setText('Score: ' + score);
-
-    if (wheats.countActive(true) === 0)
-    {
-        wheats.children.iterate(function (child) {
-            child.enableBody(true, child.x, 0, true, true);
-        });
-
-        var x = (player.x < 400) ? Phaser.Math.Between(400, 800) : Phaser.Math.Between(0, 400);
-
-        var bomb = bombs.create(x, 16, 'bomb');
-        bomb.setBounce(1);
-        bomb.setCollideWorldBounds(true);
-        bomb.setVelocity(Phaser.Math.Between(-200, 200), 20);
-
+function hitBomb (player, bomb){
+    if (unkillable) {
+        player.clearTint();
+        bomb.disableBody(true, true);
+        unkillable = false;
+        updateScore(50);
+        playSound('kill');
+    } else {
+        die();
+        this.time.addEvent({ delay: 2000, callback: destroy, callbackScope: player, loop: false });
     }
-}
-
-function hitBomb (player, bomb)
-{
-    this.physics.pause();
-
-    player.setTint(0xff0000);
-
-    player.anims.play('turn');
-
-    gameOver = true;
 }
 
 function hitUFO (player, ufo){
@@ -259,8 +362,10 @@ function hitUFO (player, ufo){
         ufo.disableBody(true, true);
         unkillable = false;
         updateScore(50);
+        playSound('kill');
 
         if (ufos.countActive(true) === 0){
+            winLevel();
 
             ufos.children.iterate(function (child) {
                 child.enableBody(true, child.x, child.y, true, true);
@@ -271,19 +376,68 @@ function hitUFO (player, ufo){
             unkillable = true;
             var x = (player.x < 400) ? Phaser.Math.Between(400, 800) : Phaser.Math.Between(0, 400);
 
-            var ufo = ufos.create(x, 100, 'ufo').setScale(1);
+            var ufo = ufos.create(x, 100, 'ufo').setScale(0.5);
             ufo.setBounce(1);
             ufo.setCollideWorldBounds(true);
             ufo.setVelocity(Phaser.Math.Between(10, 200), 0);
         }
     } else {
-        this.physics.pause();
+        die();
+        this.time.addEvent({ delay: 2000, callback: destroy, callbackScope: player, loop: false });
+    }
+}
 
-        player.setTint(0xff0000);
+function die () {
+    dieSound.play();
+    player.disableBody(true, true);
+    scoreLvl.setText(null);
+    scoreText.setText('Game over!');
+    burguer.enableBody(true, player.x, player.y, true, true);
+    start.stop();
+    gameOver = true;
+}
 
-        player.anims.play('turn');
+function destroy () {
+    bombs.children.iterate(function (child) {
+        child.disableBody(true, true);
+    });
+    ufos.children.iterate(function (child) {
+        child.disableBody(true, true);
+    });
+}
 
-        gameOver = true;
+function winLevel (){
+    wheats.children.iterate(function (child) {
+        child.enableBody(true, child.x, 100, true, true);
+    });
+    level++;
+    scoreLvl.setText('Level: ' + level);
+    updateScore(200);
+    playSound('nextLvl');
+}
+
+function playSound( sound ){
+    if (!gameOver) {
+        switch (sound) {
+            case 'jump':
+                jump.play({volume: 0.3});
+                break;
+            case 'wheatSound':
+                wheatSound.play({volume: 0.2});
+                break;
+            case 'cornSound':
+                cornSound.play({volume: 0.2});
+                break;
+            case 'kill':
+                kill.play();
+                break;
+            case 'bombSound':
+                bombSound.play({volume: 0.2});
+                break;
+            case 'nextLvl':
+                nextLvl.play({volume: 0.3});
+                break;
+        }
     }
 }
 </script>
