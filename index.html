@@ -29,27 +29,30 @@ var game = new Phaser.Game(config);
 var score = 0;
 var scoreText;
 
+var timedEvent;
+
+var counter = 0;
+var unkillable = false;
+
 /**
  * Cargamos en memoria todos los assets que se muestran en 
  * la escena.
  */
 function preload ()
 {
-
-
     this.load.setBaseURL('http://labs.phaser.io');
     this.load.image('sky', 'assets/skies/sky1.png');
     this.load.image('ground', 'assets/sprites/block.png');
-    this.load.image('star', 'assets/sprites/apple.png');
+    this.load.image('wheat', 'assets/sprites/apple.png');
     this.load.image('bomb', 'assets/sprites/mine.png');
-    this.load.image('enemy', 'assets/sprites/clown.png');
-
+    this.load.image('corn', 'assets/sprites/cocktail.png');
 
     this.load.spritesheet('dude', 
         'assets/sprites/dude.png',
         { frameWidth: 32, frameHeight: 48 }
     );
-    
+
+    this.load.image('ufo', 'assets/sprites/clown.png');
 }
 
 function create ()
@@ -101,19 +104,19 @@ function create ()
     cursors = this.input.keyboard.createCursorKeys();
 
     // Manzanas
-    stars = this.physics.add.group({
-        key: 'star',
-        repeat: 11,
-        setXY: { x: 12, y: 100, stepX: 70 }
+    wheats = this.physics.add.group({
+        key: 'wheat',
+        repeat: 4,
+        setXY: { x: 200, y: 100, stepX: 200 },
     });
 
-    stars.children.iterate(function (child) {
+    wheats.children.iterate(function (child) {
         child.body.setGravityY(320);
         child.setBounceY(Phaser.Math.FloatBetween(0.4, 0.8));
     });
 
-    this.physics.add.collider(stars, platforms);
-    this.physics.add.overlap(player, stars, collectStar, null, this);
+    this.physics.add.collider(wheats, platforms);
+    this.physics.add.overlap(player, wheats, collectStar, null, this);
 
     // Texto score
     scoreText = this.add.text(16, 16, 'score: 0', { fontSize: '32px', fill: '#000' });
@@ -125,13 +128,21 @@ function create ()
 
     this.physics.add.collider(player, bombs, hitBomb, null, this);
 
+    // Bonus
+    corns = this.physics.add.group();
+    this.physics.add.collider(corns, platforms);
+    this.physics.add.overlap(player, corns, handleBonus, null, this);
+
+    // Tiempo
+    timedEvent = this.time.addEvent({ delay: 2000, callback: onEvent, callbackScope: this, loop: true });
+
     // Ovnis
     ufos = this.physics.add.group();
     this.physics.add.collider(ufos, platforms);
-    this.physics.add.collider(player, ufos, hitBomb, null, this);
+    this.physics.add.collider(player, ufos, hitUFO, null, this);
 
     var x = (player.x < 400) ? Phaser.Math.Between(400, 800) : Phaser.Math.Between(0, 400);
-    var ufo = ufos.create(x, 100, 'enemy').setScale(2);
+    var ufo = ufos.create(x, 100, 'ufo').setScale(2);
     ufo.setCollideWorldBounds(true);
     ufo.setVelocity(Phaser.Math.Between(10, 200), 0);
     ufo.setBounce(1);
@@ -163,15 +174,61 @@ function update ()
     }
 }
 
+function onEvent (){
+    if (ufos.countActive(true) > 0){
+        ufos.children.iterate(function (child) {
+            //console.log(child);
+            if (child.active && child.visible) {
+
+                if (counter === 2) {
+                    var bonus = corns.create(child.x, child.y, 'corn');
+                    bonus.setGravityY(Phaser.Math.Between(0, 300));
+                    bonus.setBounce(Phaser.Math.FloatBetween(0.5, 1));
+                    bonus.setCollideWorldBounds(true);
+                    bonus.setVelocity(Phaser.Math.Between(-200, 200), Phaser.Math.Between(-200, 200));
+                    counter = 0;
+                } else {
+                    var bomb = bombs.create(child.x, child.y, 'bomb');
+                    bomb.setGravityY(Phaser.Math.Between(0, 300));
+                    bomb.setBounce(Phaser.Math.FloatBetween(0.5, 1));
+                    bomb.setCollideWorldBounds(true);
+                    bomb.setVelocity(Phaser.Math.Between(-200, 200), Phaser.Math.Between(-200, 200));
+                    counter++;
+                }
+                
+            }
+        });
+    }
+}
+
+function updateScore (newScore){
+    score += newScore;
+    scoreText.setText('Score: ' + score);
+}
+
+function handleBonus ( player, corn ){
+    updateScore(20);
+    if (bombs.countActive(true) > 0)
+    {
+        bombs.children.iterate(function (child) {
+            child.setVisible(false);
+            child.disableBody(true, true);
+        });
+    }
+    player.setTint(0xFFFF00);
+    corn.disableBody(true, true);
+    unkillable = true;
+}
+
 function collectStar (player, star)
 {
     star.disableBody(true, true);
     score += 10;
     scoreText.setText('Score: ' + score);
 
-    if (stars.countActive(true) === 0)
+    if (wheats.countActive(true) === 0)
     {
-        stars.children.iterate(function (child) {
+        wheats.children.iterate(function (child) {
             child.enableBody(true, child.x, 0, true, true);
         });
 
@@ -194,6 +251,40 @@ function hitBomb (player, bomb)
     player.anims.play('turn');
 
     gameOver = true;
+}
+
+function hitUFO (player, ufo){
+    if (unkillable) {
+        player.clearTint();
+        ufo.disableBody(true, true);
+        unkillable = false;
+        updateScore(50);
+
+        if (ufos.countActive(true) === 0){
+
+            ufos.children.iterate(function (child) {
+                child.enableBody(true, child.x, child.y, true, true);
+                child.setCollideWorldBounds(true);
+                child.setVelocity(Phaser.Math.Between(10, 200), 0);
+                child.setBounce(1);
+            });
+            unkillable = true;
+            var x = (player.x < 400) ? Phaser.Math.Between(400, 800) : Phaser.Math.Between(0, 400);
+
+            var ufo = ufos.create(x, 100, 'ufo').setScale(1);
+            ufo.setBounce(1);
+            ufo.setCollideWorldBounds(true);
+            ufo.setVelocity(Phaser.Math.Between(10, 200), 0);
+        }
+    } else {
+        this.physics.pause();
+
+        player.setTint(0xff0000);
+
+        player.anims.play('turn');
+
+        gameOver = true;
+    }
 }
 </script>
 
